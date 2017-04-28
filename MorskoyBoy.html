@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, maximum-scale=1"> 
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" type="text/javascript"></script>
+    <link href="https://fonts.googleapis.com/css?family=Neucha" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <title>Морской бой</title>
+</head>
+<body>
+    <div class="enter">
+        <div class="pattern">
+            <p class="h1">Морской бой</p>
+            <div class="startpanel">
+                <input type="text" name="yourname" class="yourname" placeholder="Ваше имя"><br>
+                <input type="text" name="computername" class="computername" placeholder="Имя компьютера"><br>
+                <div class="button start">Начать игру</div>
+            </div>
+        </div>
+    </div>
+    <div class="game">
+        <div class="gamepattern">
+            <p class="h2 header">
+               Игра началась!
+            </p>
+            <!-- Поле с нашими кораблями, по которому будет стрелять компьютер -->
+            <div class="field"></div>
+            
+            <!-- Пустое поле, по которому будем стрелять мы -->
+            <div class="enemyfield non">
+            </div> 
+
+            <div class="button start green">Начать заново</div>
+        </div> 
+    </div>
+    <div class="show"></div>
+<!--     <div class="debug">
+    </div> -->
+    <div class="overlay"></div>
+    <div class="modal">
+        <div class="close">✕</div>
+        <p class="h1">Игра законена</p>
+        <p class="result h2"></p>
+        <p>Играть еще раз?</p>
+        <div class="button start green">Начать заново</div>
+    </div>
+<script>
+jQuery(document).ready(function($){
+
+'use strict';
+
+
+var value = 0;
+
+function f() {
+  if (1) {
+    value = true;
+  } else {
+    value = false;
+  }
+}
+
+f();
+alert(value);
+
+// Размер поля
+var n = 10;
+
+// Имена по умолчанию
+var yourname = 'Игрок1';
+var computername = 'Бот';
+var opponent = false;
+
+var abc = ['а', 'б', 'в', 'г', 'д', 'е', 'ж', 'з', 'и', 'к']
+// Объявляем массив со свойствами кораблей
+var ships = [
+    {   name: "Четырехпалубный корабль",
+        cells: [1, 1, 1, 1],
+        id: 41,
+    },
+    {   name: "Трехпалубный корабль",
+        cells: [1, 1, 1],
+        id: 31,
+    },
+    {   name: "Трехпалубный корабль",
+        cells: [1, 1, 1],
+        id: 32,
+    },
+    {   name: "Двухпалубный корабль",
+        cells: [1, 1],
+        id: 21,
+    },
+    {   name: "Двухпалубный корабль",
+        cells: [1, 1],
+        id: 22,
+    },
+    {   name: "Двухпалубный корабль",
+        cells: [1, 1],
+        id: 23,
+    },
+    {   name: "Однопалубный корабль",
+        cells: [1],
+        id: 11,
+    },    
+    {   name: "Однопалубный корабль",
+        cells: [1],
+        id: 12,
+    },              
+    {   name: "Однопалубный корабль",
+        cells: [1],
+        id: 13,
+
+    },  
+    {   name: "Однопалубный корабль",
+        cells: [1],
+        id: 14,
+
+    }, 
+];
+// Функция вывода сообщений
+// function debug(d){
+//     $('.debug').append('<pre>'+d+'</pre>');
+// };
+
+// Вывод сообщений о подбитых кораблях
+function show(d, color){
+    $('.show').append('<div class="show_block '+color+'alert">'+d+'</div>');
+    setTimeout(function() { 
+        $('.show_block').fadeOut(400);
+    }, 2000);
+};
+
+// Поиск в массиве с условиями, для сравнения с id имеющихся кораблей
+function findConditionField(array, value, condition) {
+    for (var i = 0; i < n; i++) {
+        for (var j = 0; j < n; j++) {
+            if (condition == '<') { if (array[i][j] < value) return [i, j]; }
+            if (condition == '>') { if (array[i][j] > value) return [i, j]; }
+            if (condition == '=') { if (array[i][j] === value) return [i, j]; }
+        }
+    }
+    return -1;
+}
+
+// Общий класс игроков
+class Player {
+
+    constructor(name, auto) {
+        // Установка имени игрока
+        this.name = name;
+
+        // Определение является ли он ботом
+        this.auto = auto;
+
+        // Установка класса игрока-оппонента
+        this.opponent = [];
+
+        // Массив игрового поля
+        this.field = [];   
+
+        // Массив раненых кораблей
+        this.injuredships = [];   
+    }
+
+    // Функция добавления id корабля и координаты попадания к массиву раненых кораблей 
+    SetInjuredShips(coord, id) {
+        this.injuredships.push([id, coord]);
+    }
+
+    // Создание массива field с кораблями
+    FillField() {
+
+        // Получаем чистый массив field
+        this.field = this.ClearField();
+
+        // Ссылка на глобальный объект для использования при его переопределении в цикле
+        var self = this;
+
+        // Проходим по заданному массиву кораблей
+        ships.forEach(function(item, i) {
+            var coord = self.ChooseCell(); // Выбор пустой точки т.е. рандомный поиск адреса нулевого значения в массиве
+            var orient = Math.random() >= 0.5; // Рандомный выбор ориентации корабля (вертикальной или горизонтальной)
+            var f = false;
+            var i = 0;
+            var j = 0;
+            // Входим в цикл со случайной кординатой. Для упрощения понимания: coord[0] = y. coord[1] = x
+            while (coord[0]<n) {
+                while (coord[1]<n) {
+                   // Проверяем возможно ли размещения корабля по этой точке 
+                   f = self.CheckPlace(coord, item, orient);
+                   if (f == true) break;
+                   // Если нет, то берем следующую за ней ячейку
+                   coord[1] = coord[1]+1;
+                }
+                if (f == true) break;
+                // Если строка закончилась переходим на следующую строку по y и на нулевоей значение по x
+                coord[1] = 0;
+                coord[0] = coord[0]+1;
+
+                // Если дошли до крайней точки массива, то переходим в его начало
+                if (coord[0]==n) {
+                    coord[0]=0;
+                }
+            }
+        });
+    }
+
+    // Чистое поле (без кораблей)
+    ClearField(){
+        var field = [];
+        for (var i = 0; i < n; i++){
+            field[i] = [];
+            for (var j = 0; j < n; j++){
+                field[i][j] = 0;
+        }}
+        return field;
+    }
+
+    // Случайный выбор элемента в массиве;
+    ChooseCell(){
+        var r1 = Math.floor(Math.random() * n);
+        var r2 = Math.floor(Math.random() * n);    
+        var cell_f = this.field[r1][r2];
+
+        // Необходимо убедиться что значение в рандомной точке является пустым, т.е. в ней стоит 0
+        if (cell_f===0) {
+            var cellCoord = [r1, r2]
+            return cellCoord;
+        } else {
+            var ret = this.ChooseCell();
+            return ret;
+        }
+    }
+
+    // Метод размещает корабль в массиве field
+    CheckPlace(coord, ship, orient){
+        self = this;
+        var coords = coord.slice();
+        var p;
+        var fall = false;
+
+        // Проверяем каждую точку корабля
+        ship['cells'].forEach(function(part, j) {
+
+            // Если точка занята, то возвращаем false
+            p = self.CheckCell(coords);
+            if (p==false) {
+                fall = true;
+            // Если точка в массиве field пустая - проверяем её и устанавливаем для проверки следующие координаты в зависимости от ориантации корабля
+            } else {
+                if (orient==0) {
+                   coords[1] = coords[1]+1;
+                } else {
+                   coords[0] = coords[0]+1;
+                }          
+            }
+        });
+        if (fall==true) {
+            return false;
+        }
+        // Если корабль успешно проверен - размещаем в каждой клетке массива id корабля
+        if (p!=false) {
+        ship['cells'].forEach(function(part, j) {
+            self.field[coord[0]][coord[1]] = ship['id'];
+            if (orient==0) {
+               coord[1] = coord[1]+1;
+            } else {
+               coord[0] = coord[0]+1;
+            }
+        });  
+        }
+        // Очищаем с экрана содержимое с прошлой игры
+        $('.field').empty(); 
+        $('.enemyfield').empty();
+        return true;
+    }
+
+    // Метод проверки клетки для размещения части корабля
+    CheckCell(coord) {
+
+        var y = coord[0];
+        var x = coord[1];
+
+        // В случае если первая точка корабля была рандомно поставлена у края поля то после проверки по его клеткам начнется обращение к несуществующему индексу массива что приведет к ошибке, поэтому если координата больше размера поля - возвращаем false
+        if ((x>=n)||(y>=n)) {
+            return false;
+        }
+
+        // Получаем значение ячейки по координатами
+        var f = this.field[y][x];
+
+        // Если значение занята вернем false
+        if (f!==0) {
+            return false;
+        }
+        var l = n-1;
+        // Проверка на соприкосаемость с другими кораблями, с учетом возможности плотного прилегания к границе поля. Необходимо, чтобы между кораблями была 1 клетка, но возможность прилегать к границе сохранялась, поэтому проверяем клетки корабля. Условия перед проверкой определяют находимся ли мы возле границы и если да, то не нужно проверять клетки за её пределами, а только те что указаны как '1' в параметре функции, иначе это приведет к ошибке.
+        // Порядок параметров проверки клеток соответствует часам. Первый параметр 12 часов.
+        if ((x==l)&&(y==l)) { var fa = this.CheckArround(x,y,1,0,0,0,0,0,1,1);} else
+        if ((x==0)&&(y==0)) { var fa = this.CheckArround(x,y,0,0,1,1,1,0,0,0);} else
+        if ((x==l)&&(y==0)) { var fa = this.CheckArround(x,y,0,0,0,0,1,1,1,0);} else
+        if ((x==0)&&(y==l)) { var fa = this.CheckArround(x,y,1,1,1,0,0,0,0,0);} else
+        if (y==0) { var fa = this.CheckArround(x,y,0,0,1,1,1,1,1,0);} else
+        if (y==l) { var fa = this.CheckArround(x,y,1,1,1,0,0,0,1,1);} else
+        if (x==0) { var fa = this.CheckArround(x,y,1,1,1,1,1,0,0,0);} else 
+        if (x==l) { var fa = this.CheckArround(x,y,1,0,0,0,1,1,1,1);} else 
+        if ((x!=0)&&(y!=0)) { var fa = this.CheckArround(x,y,1,1,1,1,1,1,1,1);}
+
+        // Если условия удовретворяют то вернем true
+        if (fa==true) {
+            return true;
+        } else { 
+            return false;
+        }
+    }
+
+    // Метод проверки на соприкасамость с другими кораблями
+    CheckArround(x,y,tc,tr,mr,br,bc,bl,ml,tl){
+        var f1,f2,f3,f4,f5,f6,f7,f8;
+        f1 = f2 = f3 = f4 = f5 = f6 = f7 = f8 = 0;
+        if (tc!=0) { f1 = this.field[y-1][x]; }
+        if (tr!=0) { f2 = this.field[y-1][x+1]; }
+        if (mr!=0) { f3 = this.field[y][x+1]; }
+        if (br!=0) { f4 = this.field[y+1][x+1]; }
+        if (bc!=0) { f5 = this.field[y+1][x]; }
+        if (bl!=0) { f6 = this.field[y+1][x-1]; }
+        if (ml!=0) { f7 = this.field[y][x-1]; }
+        if (tl!=0) { f8 = this.field[y-1][x-1]; }
+        if ((f1<1)&&(f2<1)&&(f3<1)&&(f4<1)&&(f5<1)&&(f6<1)&&(f7<1)&&(f8<1)) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    // сеттер для определения противника
+    set Opponent(newValue) {
+        this.opponent = newValue;
+    }
+
+    // Строим поле, если opponent == true, то строим DOM элементы без указания классов кораблей. В противном случае строим поле на экране с указанием местоположения кораблей
+    BuildField(opponent){
+        var cssclass;
+        var fieldclass;
+        var it = this;
+        if (opponent==true) {
+            it = this.opponent;
+            fieldclass = '.enemyfield';
+            var name = computer.name;
+        } else {
+            fieldclass = '.field';
+            var name = player.name;
+        }
+        // Заголовок поля
+        $(fieldclass).append('<p class="h3">Поле игрока: '+name+'</p>');
+        
+        $(fieldclass).append('<div class="xorder">y|x</div>');
+
+        // Подписи по оси x. Обращение к алфавиту - расчитан только на 10 значений        
+        it.field.forEach(function(item, i) {
+            $(fieldclass).append('<div class="xorder">'+abc[i]+'</div>');
+        });
+        $(fieldclass).append('<br>');
+        it.field.forEach(function(item, i) {
+            var num = i+1;
+
+            // Подписи по оси y      
+            $(fieldclass).append('<div class="yorder">'+num+'</div><div class="y y'+i+'"></div>');
+            item.forEach(function(cell, j) {
+                // Класс для отображения корабля      
+                if ((cell>1)&&(opponent!=true)) { cssclass = 'fieldship'; }
+
+                // Атрибуты для обращения к ним при нажатии на клетку    
+                $(fieldclass).find('.y'+i).append('<div class="x x'+j+' '+cssclass+'" data-x="'+j+'" data-y="'+i+'"></div>');
+                
+                // Обнуляем класс
+                cssclass = '';
+            });
+        });         
+    }
+
+    // Шаги игрока
+    MakeStep(x,y){
+        var shoot;
+        shoot = this.opponent.field[y][x];
+
+        // Если shoot > 2 значит было попадание
+        if (shoot>2) {
+
+            // Добавление значения в данной ячейке в массив раненых кораблей
+            this.SetInjuredShips([y, x], shoot);
+            $('.enemyfield').find(".y"+y).find(".x"+x).addClass('enemy');
+        } else {
+            $('.enemyfield').find(".y"+y).find(".x"+x).addClass('miss');
+            $('.header').html('Ход игрока: '+this.opponent.name)
+        }
+
+        // Установка значения в данной ячейке = 2. т.е. в данную клетку уже был произведен выстрел
+        this.opponent.field[y][x] = 2;
+        var coords = [y, x];
+        // Проверка подбит ли корабль
+        this.ShipDeath(coords, shoot);
+
+        // Проверка остались ли еще корабли на поле
+        if (findConditionField(this.opponent.field,2,'>')==-1) {
+            $('.header').html('<span class="win">Вы выиграли!!!</span>');
+            this.EndGame();
+        }
+        if (shoot>2) {
+
+            // Возврат true необходим для выполнения повторного выстрела без передачи хода противнику
+            return true;
+        }
+
+        // Блокирование возможности выстрела
+        $('.enemyfield').addClass('non');
+    } 
+
+    // Проверка подбит ли корабль целиком, shoot - id корабля
+    ShipDeath(coords, shoot) {
+
+        // Дублирование ссылки на глобальный объект, для обращения к нему при его переопределении из последующего цикла
+        var self = this;
+
+        // SHOOT может иметь значение 0, 2 и id кораблей. 0 - пустая клетка, 2 - клетка по которой был сделан выстрел
+        if (shoot>2) {           
+
+            // Проверяем имеются ли в массиве такие id
+            var place = findConditionField(this.opponent.field, shoot, '=');
+
+            // Если id отсутствует значит корабль подбит
+            if (place == -1) {
+                
+                self.SetInjuredShips(coords, shoot);
+
+                // Для каждой клетки подбитого корабля получаем координаты свободного окружения которые мы хотим занять
+                this.injuredships.forEach(function(item, i) {
+                    if (item[0] == shoot) {
+                    // Метод необходим для того чтобы определить в каких точках установить границу корабля после того как он подбит. Метод примерно аналогичен методу CheckCell                         
+                    var d = self.CheckDeadCell(item[1]);
+                    // Устанавливаем маркеры в этих клетках и значения в массиве
+                    d.forEach(function(item, i) {
+                        var y = item[0];
+                        var x = item[1];
+                        self.opponent.field[y][x]=2;
+                        if (self.opponent==player) {
+                            $('.field').find(".y"+y).find(".x"+x).addClass('miss');
+                        } else {
+                            $('.enemyfield').find(".y"+y).find(".x"+x).addClass('miss');
+                        }
+                    });                    
+                    }
+                });
+
+                if (this.auto == true) {
+                    show('Ваш корабль подбит!', 'red');
+                } else {
+                    show('Корабль игрока '+self.opponent.name+' подбит!', 'green');
+                }
+                return true;
+            } else {
+                return false;
+            }
+        }      
+    }
+
+    CheckDeadCell(coord) {
+        var y = coord[0];
+        var x = coord[1];
+        var l = n-1;
+
+        if ((x==l)&&(y==l)) { var fa = this.CheckShootArround(x,y,1,0,0,0,0,0,1,1,true);} else
+        if ((x==0)&&(y==0)) { var fa = this.CheckShootArround(x,y,0,0,1,1,1,0,0,0,true);} else
+        if ((x==l)&&(y==0)) { var fa = this.CheckShootArround(x,y,0,0,0,0,1,1,1,0,true);} else
+        if ((x==0)&&(y==l)) { var fa = this.CheckShootArround(x,y,1,1,1,0,0,0,0,0,true);} else
+        if (y==0) { var fa = this.CheckShootArround(x,y,0,0,1,1,1,1,1,0,true);} else
+        if (y==l) { var fa = this.CheckShootArround(x,y,1,1,1,0,0,0,1,1,true);} else
+        if (x==0) { var fa = this.CheckShootArround(x,y,1,1,1,1,1,0,0,0,true);} else 
+        if (x==l) { var fa = this.CheckShootArround(x,y,1,0,0,0,1,1,1,1,true);} else 
+        if ((x!=0)&&(y!=0)) { var fa = this.CheckShootArround(x,y,1,1,1,1,1,1,1,1,true);}
+        return fa;
+    }
+
+    CheckShootArround(x,y,tc,tr,mr,br,bc,bl,ml,tl,checkarroundship){
+        var f1,f2,f3,f4,f5,f6,f7,f8;
+        var freefield = [];
+        var self = this;
+        f1 = f2 = f3 = f4 = f5 = f6 = f7 = f8 = 0;
+        // checkarroundship необходим для того чтобы либо возвращать клетки с нулевыми значениями, либо возвращать те в которые не стреляли (последняя необходима для того чтобы менять направления после выстрелов по порядку (для бота))
+        if (tc!=0) { 
+            f1 = self.opponent.field[y-1][x];
+            if (checkarroundship==true) {
+                if (f1==0) {
+                    freefield.push([y-1, x]);
+                }
+            } else {
+                if (f1!=2) {
+                    freefield.push([y-1, x]);
+                }                
+            }
+        }
+        if (tr!=0) { 
+            f2 = self.opponent.field[y-1][x+1]; 
+            if (checkarroundship==true) {
+                if (f2==0) {
+                    freefield.push([y-1, x+1]);
+                }
+            } else {
+                if (f2!=2) {
+                    freefield.push([y-1, x+1]);
+                }  
+            }
+        }
+        if (mr!=0) { 
+            f3 = self.opponent.field[y][x+1]; 
+            if (checkarroundship==true) {
+                if (f3==0) {
+                    freefield.push([y, x+1]); 
+                }
+            } else {
+                if (f3!=2) {
+                    freefield.push([y, x+1]);
+                }  
+            }
+        }
+        if (br!=0) { 
+            f4 = self.opponent.field[y+1][x+1]; 
+            if (checkarroundship==true) {
+                if (f4==0) {
+                    freefield.push([y+1, x+1]); 
+                }
+            } else {
+                if (f4!=2) {
+                    freefield.push([y+1, x+1]);
+                }  
+            }
+        }
+        if (bc!=0) { 
+            f5 = self.opponent.field[y+1][x]; 
+            if (checkarroundship==true) {
+                if (f5==0) {
+                    freefield.push([y+1, x]); 
+                }
+            } else {
+                if (f5!=2) {
+                    freefield.push([y+1, x]);
+                }  
+            }
+        }
+        if (bl!=0) { 
+            f6 = self.opponent.field[y+1][x-1]; 
+            if (checkarroundship==true) {
+                if (f6==0) {
+                    freefield.push([y+1, x-1]); 
+                }
+            } else {
+                if (f6!=2) {
+                    freefield.push([y+1, x-1]);
+                }  
+            }
+        }
+        if (ml!=0) { 
+            f7 = self.opponent.field[y][x-1]; 
+            if (checkarroundship==true) {
+                if (f7==0) {
+                    freefield.push([y, x-1]); 
+                }
+            } else {
+                if (f7!=2) {
+                    freefield.push([y, x-1]);
+                }  
+            }
+        }
+        if (tl!=0) { 
+            f8 = self.opponent.field[y-1][x-1]; 
+            if (checkarroundship==true) {
+                if (f8==0) {
+                    freefield.push([y-1, x-1]); 
+                }
+            } else {
+                if (f8!=2) {
+                    freefield.push([y-1, x-1]);
+                }  
+            }
+        }
+        
+        return freefield;
+    }
+
+    EndGame(){
+        $('.enemyfield').addClass('non');
+        setTimeout(function(){
+            $('.overlay').fadeIn(1000);
+            $('.modal').fadeIn(1000);
+        }, 3000);
+    }    
+}
+// Класс включает, а также переопределяет методы которые необходимы для автоматических ходов. Является наследником от класса Player
+class Computer extends Player {
+    // Шаг компьютера
+    MakeStep(){
+
+        // Логика ходов такова: 
+        // После первого рандомного выстрела компьютер проверяет подбит ли корабль. Если нет то он передает себе эти кардинаты для определения последовательности выстрелов. После двух выстрелов создается startpoint и shootpoint которые позволяют определить направление следующих выстрелов. Если данные выстрели уперлись в край поля/точку в которую был произведен выстрел, но корабль все еще не подбит то возвращаемся к startpoint и меняем направление выстрелов на диаметрально противоположное. Если корабль подбит эти переменные сбрасываются.
+
+        // Переменная shoot необходима для того чтобы определить было ли попадание и если да, то выстрел будет продолжен до тех пор пока переменная не изменится.
+        var shoot;
+        var self = this;
+
+        // SetInterval необходим для задержки и визуального "раздумывания" компьютером
+        var timer = setInterval(function() {
+            // Записываем в переменную результат выстрела
+            shoot = self.MakeNextStep(shoot);  
+
+            // Если попадания не было - то выходим из таймера и передаем ход игроку.          
+            if (shoot<=2) {
+                clearInterval(timer);
+                // открываем доступ для хода человека
+                $('.enemyfield').removeClass('non');
+            }
+        }, 500);
+    }
+
+    MakeNextStep(shoot){
+        var x,y;
+        var self = this;
+        // Выбираем случайную точку в массиве оппонента.
+        var coords = self.ChooseShootCell();
+        // var shoot;
+        // shootpoint (по умолчанию = 0) отвечает за вхождение в условие для определения следующей координаты выстрела. Является глобальной переменной, чтобы не было перезаписи при повторном вызове функции.
+        if (self.shootpoint.length > 0) {
+
+            // Записываем точку в массив раненых кораблей
+            self.SetInjuredShips(self.shootpoint, shoot);
+
+            // Получаем следующую координату выстрела от функции + перезаписываем рандомные координаты выбранными
+            coords = self.CheckShootPlace(self.shootpoint);
+        }
+        
+        // Извлекаем координаты
+        y = coords[0];
+        x = coords[1];
+
+        // Получаем значение в точке выстрела
+        shoot = self.opponent.field[y][x];
+        // Устанавливаем для всех точек, в которые был произведен выстрел значение 2
+        self.opponent.field[y][x] = 2;
+
+        // Если было попадание, но корабль не подбит
+        if (shoot>2) {
+
+            // Устанавливаем ячейке класс попадания по кораблю противника
+            $('.field').find(".y"+y).find(".x"+x).addClass('enemy');
+            
+            // Устанавливаем переменной для вхождения в условие координаты. Необходимо в случае если попадание в корабль было впервые
+            self.shootpoint = [y,x];
+
+            // Если у нас есть стартовая точка, точка текущего выстрела и нет направления, то определяем его
+            if ((self.startpoint!=0)&&(self.shootpoint!=0)&&(self.direction==0)) {
+                self.direction = self.DefineDirection(self.startpoint, self.shootpoint);
+            }
+        } else {
+            // Если корабль не подбит - но было направление выстрелов, то это значит что был промах, и необходимо поменять направление и вернуться к startpoint
+            // С параметрами, установленными ниже произойдет вхождение в метод CheckShootPlace
+
+            if ((self.direction!=0)&&(self.opponent.field[coords[0]][coords[1]]==2)) {
+
+                // Смена направления на противоположное
+                if (self.direction<=2) {
+                    self.direction = self.direction+2;
+                } else {
+                    self.direction = self.direction-2;
+                }
+                // Точкой выстрела делаем стратовую точку
+                self.shootpoint = self.startpoint.slice();
+            }
+            $('.field').find(".y"+y).find(".x"+x).addClass('miss');
+            $('.header').html('Ваш ход, '+self.opponent.name);
+
+        }
+        // Проверяем подбит ли корабль.
+        if (self.ShipDeath(coords, shoot)) {
+
+            // Если функция вернет true, то сбрасываем переменную для вхождения в условие выбора точки выстрела т.к. корабль подбит также сбрасываем переменные стартовой точки корабля и установленного направления
+            self.shootpoint = 0;
+            self.startpoint = 0;
+            self.direction = 0;
+        }        
+
+        // Если кораблей не найдено то игра закончена
+        if (findConditionField(self.opponent.field,2,'>')==-1) {
+            $('.header').html('<span class="loose">'+computer.name+' Выиграл!</span>');
+            self.EndGame();
+        }
+        return shoot;
+    }
+
+
+    CheckShootPlace(coord){
+        var coords = coord.slice(); // Делаем копию координат без ссылки
+        var p;  // Массив результатов
+        var ret;    // Результат
+        var orient=0; // Локальная переменна направления
+
+        // Если направление уже существует
+        if (this.direction!=0) {
+            // то определяем следующую точку исходя из принятых координат и глобальной переменной направления выстрелов
+            ret = this.SetDirection(coords, this.direction);
+
+                // Делаем проверку не находится ли эта точка за границами поля
+                if ((ret[0]<0)||(ret[0]>n-1)||(ret[1]<0)||(ret[1]>n-1)) {
+                    // Если находится меняем направление выстрелов и возвращаемся к startpoint                    
+                    if (this.direction<=2) {
+                        this.direction = this.direction+2;
+                        ret = this.SetDirection(this.startpoint, this.direction);
+                    } else {
+                        this.direction = this.direction-2;
+                        ret = this.SetDirection(this.startpoint, this.direction);
+                    }
+                // Делаем проверку не будет ли следующая точка клеткой в которую уже был выстрел
+                } else if(this.opponent.field[ret[0]][ret[1]]==2) {
+
+                    // Если будет то меняем startpoint и направление
+                    if (this.direction<=2) {
+                        this.direction = this.direction+2;
+                        ret = this.SetDirection(this.startpoint, this.direction);
+                    } else {
+                        this.direction = this.direction-2;
+                        ret = this.SetDirection(this.startpoint, this.direction);
+                    }                                
+                }
+        // В случае если мы не имеем глобального направления
+        } else {
+            // Проверяем принятую точку и выдаем координаты возможных направлений
+            p = this.CheckShootCell(coords);
+            // Рандомно выбираем направление
+            orient = Math.floor(Math.random() * p.length);
+            // И устанавливаем координату следующего выстрела
+            ret = p[orient];
+        }
+        // Если startpoint не существует, то задаем его в виде текущей точки выстрела
+        if (this.startpoint==0) {
+            this.startpoint = coords;
+        }
+        return ret;
+    }  
+
+    // Рандомный выстрел с проверкой была ли эта клетка уже подбита или нет
+    ChooseShootCell(){
+        var r1 = Math.floor(Math.random() * n);
+        var r2 = Math.floor(Math.random() * n);    
+        var cell_f = this.opponent.field[r1][r2];
+
+        if (cell_f!=2) {
+            var cellCoord = [r1, r2]
+            return cellCoord;
+
+        } else {
+            var ret = this.ChooseShootCell();
+            return ret;
+        }
+    }
+    // Метод определения направлений выстрелов
+    CheckShootCell(coord) {
+        var y = coord[0];
+        var x = coord[1];
+
+        var l = n-1;
+
+        if ((x==l)&&(y==l)) { var fa = this.CheckShootArround(x,y,1,0,0,0,0,0,1,0,false);} else
+        if ((x==0)&&(y==0)) { var fa = this.CheckShootArround(x,y,0,0,1,0,1,0,0,0,false);} else
+        if ((x==l)&&(y==0)) { var fa = this.CheckShootArround(x,y,0,0,0,0,1,0,1,0,false);} else
+        if ((x==0)&&(y==l)) { var fa = this.CheckShootArround(x,y,1,0,1,0,0,0,0,0,false);} else
+        if (y==0) { var fa = this.CheckShootArround(x,y,0,0,1,0,1,0,1,0,false);} else
+        if (y==l) { var fa = this.CheckShootArround(x,y,1,0,1,0,0,0,1,0,false);} else
+        if (x==0) { var fa = this.CheckShootArround(x,y,1,0,1,0,1,0,0,0,false);} else 
+        if (x==l) { var fa = this.CheckShootArround(x,y,1,0,0,0,1,0,1,0,false);} else 
+        if ((x!=0)&&(y!=0)) { var fa = this.CheckShootArround(x,y,1,0,1,0,1,0,1,0,false);}
+        return fa;
+    }
+
+    // Метод определения направления выстрела исходя из 2 координат
+    DefineDirection(starts, end){
+        var direction;
+        if (end[0]-starts[0]<0) { direction = 1}
+        if (end[1]-starts[1]>0) { direction = 2}
+        if (end[0]-starts[0]>0) { direction = 3}
+        if (end[1]-starts[1]<0) { direction = 4}
+        return direction;        
+    }
+
+    // Установка точки выстрела в зависимости от направления и текущей координаты
+    SetDirection(starts, direction) {
+        var end=starts.slice();
+        if (direction==1) {end[0]=starts[0]-1}
+        if (direction==2) {end[1]=starts[1]+1}
+        if (direction==3) {end[0]=starts[0]+1}
+        if (direction==4) {end[1]=starts[1]-1}
+        return end;
+    }
+
+
+
+}
+// Метод создания игры
+function createGame() {
+    player.Opponent = computer;             // Определение противника для игрока
+    computer.Opponent = player;             // Определение противника для компьютера
+
+
+    // Обнуление всех переменных
+    computer.shootpoint = 0;
+    computer.startpoint = 0;
+    computer.direction = 0;
+
+    computer.opponent.length = 0;
+    computer.field.length = 0;   
+    computer.injuredships.length = 0;   
+
+    player.opponent.length = 0;
+    player.field.length = 0;   
+    player.injuredships.length = 0;
+
+    player.FillField();                     // Создает Поле игрока и автоматически размещает корабли
+    computer.FillField();                   // Создает Поле компьютера и автоматически размещает корабли
+
+    player.BuildField(false);               // Построить на экране своё поле
+    player.BuildField(true);                // Построить на экране поле противника
+
+    // Рандомно выбираем чей ход первый
+    if (Math.random() >= 0.5) {
+        $('.header').html('Игра Началась!<br>Ход игрока: '+computer.name);
+        setTimeout(function(){
+            var step = computer.MakeStep();
+            $('.enemyfield').removeClass('non');
+        }, 1000);
+    } else {
+        $('.header').html('Игра началась!<br>Ваш ход, '+player.name)
+        $('.enemyfield').removeClass('non');
+    }
+
+}
+
+    // Описание классов и их методов завершено
+    // Создаем объекты
+    let player = new Player(yourname, false);
+    let computer = new Computer(computername, true);
+    
+    // При клике на старт - создаем игру. 
+    $('.start').on('click', function(event){ 
+        $('.modal').fadeOut();       
+        $('.overlay').fadeOut();       
+        if (($('.yourname').val()=='')||($('.computername').val()=='')) {
+            // Если необходимо проверять имена на заполненность
+            // alert('Введите имена игроков');
+            // return;
+        } else {
+            player.name = $('.yourname').val();
+            computer.name = $('.computername').val();              
+        }
+        $('.enter').slideUp(200);
+        createGame();
+    });
+
+    
+    $('.enemyfield').on('click', '.x', function(event){
+        // Получаем координаты выстрела и передаем их методу MakeStep
+        var x = $(this).data('x');
+        var y = $(this).data('y');
+        var step = player.MakeStep(x,y);
+        // Если не было попадания то передаем ход компьютеру
+        if (!step) {
+            $('.header').html('Ход игрока: '+computer.name);
+            var computep = computer.MakeStep();
+        }
+    });
+    // Закрываем модальное окно по клику после завершения игры
+    $('.modal').on('click', '.close', function(event){
+        $('.modal').fadeOut();       
+        $('.overlay').fadeOut();         
+    });    
+});
+</script>
+
+</body>
+</html>
