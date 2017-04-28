@@ -1,2 +1,2 @@
 # Battleship
-Battleship game on js
+Battleship is a game between a player and a computer written in javascript, also uses JQuery
